@@ -1,6 +1,7 @@
 ---
-layout: post
-title:  "Finite abstract algebra in Haskell, Part I: Introduction"
+layout: page
+title:  "Finite abstract algebra in Haskell"
+author: Ben Selfridge
 date:   2021-06-13 11:55:46 -0700
 categories: haskell mathematics
 ---
@@ -13,146 +14,20 @@ rise to incredible complexity and beauty.
 Ever since I was introduced to the topic, I've wanted to formalize these elegant
 concepts in a computational setting where I could explore various examples of
 groups, peel them apart, construct quotients and morphisms with them, look at
-their cayley subgroup diagrams, and generally "play" with groups in order to
+their Cayley subgroup diagrams, and generally "play" with groups in order to
 understand them in a concrete and intuitive way.
 
-In this series of blog posts, I'll be describing a [Haskell
-library](http://github.com/benjaminselfridge/finite-algebra) I'm working on to allow me
-to play with small(-ish) finite groups and to explore group-theoretic ideas in a
-practical setting.
+In this blog post, I'll be describing a [Haskell
+library](http://github.com/benjaminselfridge/finite-algebra) I'm working on to
+allow me to play with small finite groups and to explore group-theoretic ideas
+in a practical setting.
 
 Definition of a group
 --
 
-The type class approach
-==
-Haskell has a number of implementations of the concept of a group. See:
-
-- [groups](https://hackage.haskell.org/package/groups-0.5.2/docs/Data-Group.html)
-- [group-theory](https://hackage.haskell.org/package/group-theory-0.2.2/docs/Data-Group.html)
-- [magmas](https://hackage.haskell.org/package/magmas-0.0.1/docs/Data-Group.html)
-
-All of the formalizations above use a type class to define the concept of a
-group. This approach takes the view that *sets* in mathematics correspond to
-*types* in Haskell:
+Below is my definition of a group in Haskell:
 
 ```haskell
-class Semigroup g where
-  (<>) :: g -> g -> g
-  
-class Semigroup g => Monoid g where
-  mempty :: g
-
-class Monoid g => Group g where
-  invert :: g -> g
-```
-
-We can define law-abiding instances for many types, including `Integer`:
-
-```haskell
-instance Semigroup Integer where
-  (<>) = (+)
-instance Monoid Bool where
-  mempty = 0
-instance Group Bool where
-  invert = negate
-```
-
-Formalizing groups in this way allows us to turn any Haskell type into a group
-by specifying what the multiplication, identity, and inversion operations are
-for that type. It takes advantage of Haskell's type class mechanism and builds
-on core Haskell notions of `Semigroup` and `Monoid`. 
-
-However, it is hard to use this definition in practice if the goal is to
-understand more about groups. As an example, one of the first groups we learn
-about in abstract algebra is the integers mod some positive integer `n`. To
-define this group using our `Group` type class, we first need to define a new
-type (since each type has *at most* one group instance):
-
-```haskell
-data Zn = Zn { znVal :: Integer
-             , znModulus :: Integer -- ^ Must be > 0.
-             }
-             
--- | Smart constructor for 'Zn'.
-zn :: Integer -- ^ representative
-   -> Integer -- ^ modulus
-   -> Zn
-zn i n = Zn (i `mod` n)
-```
-
-So, we have defined our type that we can define a group instance over, `Zn`, and
-a smart constructor to create elements of this group. It is pretty
-straightforward to define the `Semigroup` instance:
-
-```haskell
-instance Semigroup Zn where
-  Zn i n <> Zn j n' | n == n' = zn (i+j)
-                    | otherwise = error "can't add Zn of different modulus"
-```
-
-To add to `Zn`s together, first check that their moduli are the same (otherwise
-they are not even in the same group!), and throw an error if they are not. If
-they are the same, perform addition `mod n`.
-
-Once we try to define a `Monoid` instance, however, we run into a bit of trouble:
-
-```haskell
-instance Monoid Zn where
-  mempty = Zn 0 _ -- ??? What is the modulus?
-```
-
-Obviously, the identity element for `Zn` would have to be `0`. But *which* `0`
-do we mean? We need to know what to put for the modulus, but there are a lot of
-choices.
-
-The problem we have is that `Zn` doesn't just correspond to one group --
-it corresponds to many!
-
-We have two choices if we wish to proceed:
-1. Use fancy Haskell types to encode the modulus into the type somehow
-2. Abandon the type class approach and try something different
-
-The first option is quite appealing, and leads to something like this:
-
-```haskell
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
-
-import Data.Parameterized.NatRepr
-import GHC.TypeLits
-
-data Zn (n :: Nat) where
-  Zn :: NatRepr n -> Integer -> Zn n
-  
-instance Semigroup (Zn n) where
-  (Zn n i) <> (Zn _ j) = Zn n ((i + j) `mod` intValue n)
-instance KnownNat n => Monoid (Zn n) where
-  mempty = Zn knownNat 0
-instance KnownNat n => Group (Zn n) where
-  invert (Zn n i) = Zn n (negate i `mod` n)
-```
-
-However, I find it annoying to create a new type every time I want to mess
-around with a new kind of group. Among other things, it makes it very annoying
-to talk about subgroups of a group. For this project, I chose a different
-approach.
-
-The data type approach
-==
-
-I'm interested in constructing *finite* groups and messing around with them as
-sets with operations on them. I want to be able to use the same underlying type
-(say, `Integer`) to build two totally different groups. The type of the elements
-is not what is important to me -- those are just a set of names to use. What's
-important is the set of values that comprise the group, as well as the
-particular operations that are defined on that set. With this in mind, I came up
-with the following:
-
-```haskell
-import Data.Set (Set)
-
 data Group a where
   set :: Set a       -- ^ Elements of the group.
   mul :: a -> a -> a -- ^ Group multiplication.
@@ -160,34 +35,173 @@ data Group a where
   e   :: a           -- ^ Identity.
 ```
 
-Ironically, this is actually a bit more obvious than the type class-based
-approach from mathematical standpoint. Indeed, you can use the same underlying
-set to define totally different group structures. We can use integers to
-represent elements of `Z4`, the integers mod `4`, or `Z2 x Z2`, the direct
-product of the group of integers mod `2` with itself. We can use integers to
-represent the elements of both groups, but no matter how we name those elements,
-the two groups will have totally different multiplication tables. Below, we show
-how to use the `finite-algebras` library to inspect these two groups:
+A group is just a `Set` of elements with multiplication, inversion, and
+identity, just like in mathematics. Let's define a simple example group:
 
 ```
->>> import Algebra.Finite.Class
->>> import Algebra.Finite.Group
->>> import Algebra.Finite.Group.Zn
->>> import Algebra.Finite.Group.Symmetric
->>> z4 = znAdditive 4
->>> putStrLn $ ppMulTable z6
- |0|1|2|3
--+-+-+-+-
-0|0|1|2|3
--+-+-+-+-
-1|1|2|3|0
--+-+-+-+-
-2|2|3|0|1
--+-+-+-+-
-3|3|0|1|2
+>>> z3 = znAdditive 3
+```
+
+The `znAdditive` function constructs the group of integers mod `n` for any
+positive `n`. We can print `z3`'s multiplication table:
+
+```
+>>> p = putStrLn . ppMulTable
+>>> p z3
+ |0|1|2
+-+-+-+-
+0|0|1|2
+-+-+-+-
+1|1|2|0
+-+-+-+-
+2|2|0|1
+```
+
+We can also check that the group axioms hold:
+
+```
+>>> checkAlgebra z3
+Nothing
+```
+
+A result of `Nothing` means all the group axioms hold and this is a valid group.
+If we create an invalid group, this function will tell us which axiom fails and
+why:
+
+```
+>>> checkAlgebra z3 { inv = \a -> negate a }
+Just (InvClosed,[1])
+```
+
+The result `Just (InvClosed, [1])` tells us that the inverse operation is not
+closed, because `negate 1 == -1`, which is not an element of `[0, 1, 2]`. Let's
+try another invalid group, this time changing addition slightly:
+
+```
+>>> checkAlgebra z3 { mul = \a b -> if (a, b) == (1,1) then 1 else (a + b) `mod` 3}
+Just (MulAssoc,[1,1,2])
+```
+
+This tells us that our group multiplication operation is not associative, and in
+particular, `1*(1*2) /= (1*1)*2`.
+
+More examples
+--
+
+Symmetric groups
+===
+
+Given a set of `n` elements, we can construct the group of permutations of those
+elements:
+
+```
+>>> s3 = sn 3
+>>> p s3
+       |[1,2,3]|[1,3,2]|[2,1,3]|[2,3,1]|[3,1,2]|[3,2,1]
+-------+-------+-------+-------+-------+-------+-------
+[1,2,3]|[1,2,3]|[1,3,2]|[2,1,3]|[2,3,1]|[3,1,2]|[3,2,1]
+-------+-------+-------+-------+-------+-------+-------
+[1,3,2]|[1,3,2]|[1,2,3]|[3,1,2]|[3,2,1]|[2,1,3]|[2,3,1]
+-------+-------+-------+-------+-------+-------+-------
+[2,1,3]|[2,1,3]|[2,3,1]|[1,2,3]|[1,3,2]|[3,2,1]|[3,1,2]
+-------+-------+-------+-------+-------+-------+-------
+[2,3,1]|[2,3,1]|[2,1,3]|[3,2,1]|[3,1,2]|[1,2,3]|[1,3,2]
+-------+-------+-------+-------+-------+-------+-------
+[3,1,2]|[3,1,2]|[3,2,1]|[1,3,2]|[1,2,3]|[2,3,1]|[2,1,3]
+-------+-------+-------+-------+-------+-------+-------
+[3,2,1]|[3,2,1]|[3,1,2]|[2,3,1]|[2,1,3]|[1,3,2]|[1,2,3]
+```
+
+Here, the notation `[a,b,c]` denotes the permutation mapping `1` to `a`, `2` to
+`b`, and `3` to `c`. Let's rename the permutations to integers to get a bit more
+concise-looking table:
+
+```
+>>> h = integerRenaming s3
+>>> s3' = ghCodomain h
+>>> p s3'
+ |0|1|2|3|4|5
+-+-+-+-+-+-+-
+0|0|1|2|3|4|5
+-+-+-+-+-+-+-
+1|1|0|4|5|2|3
+-+-+-+-+-+-+-
+2|2|3|0|1|5|4
+-+-+-+-+-+-+-
+3|3|2|5|4|0|1
+-+-+-+-+-+-+-
+4|4|5|1|0|3|2
+-+-+-+-+-+-+-
+5|5|4|3|2|1|0
+```
+
+Here, `h` is the isomorphism that renames all the elements of `s3` to integers.
+
+Dihedral groups
+===
+
+The dihedral group on `n` vertices is the group of all rotations and symmetries
+of a regular `n`-gon. Since this is a subset of all possible permutations of the
+vertices, this is also a subgroup of the symmetric group on `n` objects. We can
+make this explicit:
+
+```
+>>> d4 = dn 4
+>>> s4 = sn 4
+>>> h = integerRenaming s4
+>>> s4' = ghCodomain h
+>>> d4' = ghCodomain (restrictHomomorphism h d4)
+>>> p d4'
+  |0 |5 |7 |9 |14|16|18|23
+--+--+--+--+--+--+--+--+--
+0 |0 |5 |7 |9 |14|16|18|23
+--+--+--+--+--+--+--+--+--
+5 |5 |0 |18|23|16|14|7 |9 
+--+--+--+--+--+--+--+--+--
+7 |7 |9 |0 |5 |18|23|14|16
+--+--+--+--+--+--+--+--+--
+9 |9 |7 |14|16|23|18|0 |5 
+--+--+--+--+--+--+--+--+--
+14|14|16|9 |7 |0 |5 |23|18
+--+--+--+--+--+--+--+--+--
+16|16|14|23|18|5 |0 |9 |7 
+--+--+--+--+--+--+--+--+--
+18|18|23|5 |0 |7 |9 |16|14
+--+--+--+--+--+--+--+--+--
+23|23|18|16|14|9 |7 |5 |0 
+```
+
+Direct products
+--
+
+Given two groups `g` and `h`, we can form the direct product:
+
+```
 >>> z2 = znAdditive 2
->>> z2xz2 = ghCodomain $ integerRenaming $ directProduct z2 z2
->>> putStrLn $ ppMulTable z2xz2
+>>> z2xz2 = z2 `directProduct` z2
+>>> p z2xz2
+     |(0,0)|(0,1)|(1,0)|(1,1)
+-----+-----+-----+-----+-----
+(0,0)|(0,0)|(0,1)|(1,0)|(1,1)
+-----+-----+-----+-----+-----
+(0,1)|(0,1)|(0,0)|(1,1)|(1,0)
+-----+-----+-----+-----+-----
+(1,0)|(1,0)|(1,1)|(0,0)|(0,1)
+-----+-----+-----+-----+-----
+(1,1)|(1,1)|(1,0)|(0,1)|(0,0)
+```
+
+Homomorphisms
+--
+
+The easiest example of a homomorphism is the one that renames the elements of a
+group to integers:
+
+```
+>>> :t integerRenaming
+integerRenaming :: Ord a => Group a -> GroupHomomorphism a Integer
+>>> phi = integerRenaming z2xz2
+>>> p $ ghCodomain phi
  |0|1|2|3
 -+-+-+-+-
 0|0|1|2|3
@@ -197,99 +211,150 @@ how to use the `finite-algebras` library to inspect these two groups:
 2|2|3|0|1
 -+-+-+-+-
 3|3|2|1|0
+>>> morphismTable phi
+[((0,0),0),((0,1),1),((1,0),2),((1,1),3)]
 ```
 
-The two groups are so different that you can't even rename elements to make the
-multiplication tables agree. This is easily seen by examining the diagonal -- in
-`z4`, there are two idempotent elements (elements `x` satisfying `xx = e`), but
-in `z2xz2`, all four group elements are idempotent! Multiplication just *works
-differently* in these two groups. However, nothing is stopping us from defining
-them, and even using the same underlying element type (`Integer`) to name the
-group elements:
+This is, in fact, a group isomorphism. Let's construct another homomorphism,
+this time one that is not an isomorphism:
 
 ```
->>> :t z4
-Group Integer
->>> :t z2xz2
-Group Integer
+>>> :t GroupHomomorphism
+GroupHomomorphism
+  :: Group a -> Group b -> (a -> b) -> GroupHomomorphism a b
+>>> phi = GroupHomomorphism z2xz2 z2 fst
+>>> checkMorphism phi
+Nothing
 ```
 
-With this approach, it requires less overhead to construct my own groups on the
-fly. I don't have to define a new type; I can use an existing type to create
-names for the group elements I wish to include, and then provide custom
-definitions of the three group operations for maximum flexibility.
+Here, `phi` is the projection homomorphism that simply forgets about the second
+element.
 
-Group laws
+```
+>>> morphismTable phi
+[((0,0),0),((0,1),0),((1,0),1),((1,1),1)]
+```
+
+We can actually specify a morphism by specifying its behavior on a generative
+subset of the domain:
+
+```
+>>> z4 = znAdditive 4
+>>> phi = generatedHomomorphism z4 z2 [(1, 1)]
+>>> morphismTable phi
+[(0,0),(1,1),(2,0),(3,1)]
+```
+
+Even though we didn't specify where anything besides `1` is mapped to, the
+function computed the values that the other elements must be mapped to based on
+the homomorphism law because `{1}` is a generative subset of `z4`. `{2}`,
+however, is not generative, so let's see what happens if we use that instead:
+
+```
+>>> phi = generatedHomomorphism z4 z2 [(2, 1)]
+>>> morphismTable phi
+[(0,0),(2,1)]
+>>> set $ ghDomain phi
+{0,2}
+```
+
+Because the homomorphism was specified for a non-generative subset of `z4`, we
+didn't end up with a full map from `z4` to `z2`; the domain of the resulting
+homomorphism was the subgroup `{0, 2}`.
+
+Quotient groups
 --
 
-Recall that a group must satisfy some basic axioms:
-
-* (Associativity) `forall a b c in g . (ab)c = a(bc)`
-* (Identity) `forall a in g . ea = ae = a`
-* (Inversion) `forall a in g . (inv a)a = a(inv a) = e`
-
-Because our formulation of a group is finite, we can verify these axioms hold
-for any group we might like to define using the `checkAlgebra` function from
-`Algebra.Finite.Class`:
+Given a homomorphism phi, we can compute its kernel:
 
 ```
->>> a # b = (a + b) `mod` 2
->>> neg a = negate a `mod` 2
->>> g = Group (Set.fromList [0, 1::Integer]) (#) neg 0
+>>> phi = generatedHomomorphism z4 z2 [(1, 1)]
+>>> set $ kernel phi
+{0, 2}
+```
+
+We know that the kernel of any homomorphism is a normal subgroup of the domain
+of the homomorphism:
+
+```
+>>> kernel phi `isNormalSubgroupOf` z4
+True
+```
+
+This means we can take the quotient `z4 / kernel phi`:
+
+```
+>>> g = z4 `quotientGroup` kernel phi
+>>> set g
+{% raw %}{{0,2},{1,3}}{% endraw %}
+>>> p g
+     |{0,2}|{1,3}
+-----+-----+-----
+{0,2}|{0,2}|{1,3}
+-----+-----+-----
+{1,3}|{1,3}|{0,2}
 >>> checkAlgebra g
 Nothing
 ```
 
-The result `Nothing` indicates that `g` is a valid group; the group axioms hold
-for the operations of `g`. Let's see what happens if we try to build a group
-with an invalid multiplication operation:
+Because `kernel phi` is normal, this is a well-formed construction. If we pick a
+non-normal subgroup, bad things will happen:
 
 ```
->>> _ ## _ = 0
->>> bad = Group (Set.fromList [0, 1::Integer]) (##) neg 0
->>> putStrLn $ ppMulTable bad
- |0|1
--+-+-
-0|0|0
--+-+-
-1|0|0
->>> checkAlgebra bad
-Just (IdLeftIdentity,[1])
+>>> import qualified Algebra.Finite.Set as Set
+>>> h = generated s3 (Set.fromList [fromList [2, 1, 3]])
+>>> p h
+       |[1,2,3]|[2,1,3]
+-------+-------+-------
+[1,2,3]|[1,2,3]|[2,1,3]
+-------+-------+-------
+[2,1,3]|[2,1,3]|[1,2,3]
 ```
 
-The result `Just (IdLeftIdentity,[1])` means that the identity element `0` is in
-fact *not* a left identity, with `1` being a counterexample. Indeed, looking at
-the multiplication table, we see that `0 * 1` is `0`, not `1`, as it should be.
-
-What if we forget to use modular addition, and instead use the `+` operator?
+This is the subgroup of `s3` generated by the permutation that swaps two
+elements. This subgroup is isomorphism to `z2`, but it is not a normal subgroup:
 
 ```
->>> bad2 = Group (Set.fromList [0, 1::Integer]) (+) neg 0
->>> putStrLn $ ppMulTable bad2
- |0|1
--+-+-
-0|0|1
--+-+-
-1|1|2
+>>> h `checkNormalSubgroupOf` s3
+Just [1,3,2]
 ```
 
-This is terrible! The binary operation isn't even well-defined on our group; one
-of its results (`2`) doesn't belong to the group's underlying set. Let's check
-it using `checkAlgebra`:
+This means that the permutation `[1,3,2]` is an example of an element `a` such
+that `a * h * a^-1 /= h`:
 
 ```
->>> checkAlgebra bad2
-Just (MulClosed,[1,1])
+>>> conjugateSet s3 (fromList [1,3,2]) (set h)
+{[1,2,3],[3,2,1]}
 ```
 
-The result `Just (MulClosed,[1,1])` means that multiplication is not closed,
-with `1` and `1` being counterexamples, since `1 + 1 = 2` is not an element of
-our group.
+What happens if we still try to take the quotient group anyway?
+
+```
+>>> q = s3 `quotientGroup` h
+>>> checkAlgebra q
+Just (MulClosed,[{[1,2,3],[2,1,3]},{[1,3,2],[3,1,2]}])
+```
+
+The problem here is that although we can take the cosets of `h`, multiplication
+is not closed; in particular, when we multiply the cosets `{[1,2,3],[2,1,3]}`
+and `{[1,3,2],[3,1,2]}` we get something that is not a coset:
+
+```
+>>> mul q (Set.fromList [fromList [1,2,3],fromList [2,1,3]]) (Set.fromList [fromList [1,3,2],fromList [3,1,2]])
+{[1,3,2],[2,3,1],[3,1,2],[3,2,1]}
+```
+
+Not only is this not a coset, it doesn't even have the right number of elements
+to be one.
 
 What next?
 --
 
-In part II, I'll demonstrate how to use
-[finite-algebra](http://github.com/benjaminselfridge/finite-algebra) to
-construct homomorphisms and quotient groups, and I'll show off some more
-interesting examples of groups.
+The immediate next goal I have is to produce the Cayley diagram of a group. It's
+relatively straightforward to compute every nontrivial subgroup and arrange them
+in a lattice, so that will be fun to do whenever I get the chance.
+
+In addition, it would be nice to create similar algebraic constructions for
+rings and fields. The `Algebra` type class (not described in this post) handles
+a lot of the machinery for checking that all the group laws hold, and this type
+class is not biased toward the group axioms or even the group operations.
