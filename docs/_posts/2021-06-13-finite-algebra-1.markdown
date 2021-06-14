@@ -28,11 +28,11 @@ Definition of a group
 Below is my definition of a group in Haskell:
 
 ```haskell
-data Group a where
-  set :: Set a       -- ^ Elements of the group.
-  mul :: a -> a -> a -- ^ Group multiplication.
-  inv :: a -> a      -- ^ Inversion.
-  e   :: a           -- ^ Identity.
+data Group a = Group { set :: Set a       -- ^ Elements of the group.
+                       mul :: a -> a -> a -- ^ Group multiplication.
+                       inv :: a -> a      -- ^ Inversion.
+                       e   :: a           -- ^ Identity.
+                     }
 ```
 
 A group is just a `Set` of elements with multiplication, inversion, and
