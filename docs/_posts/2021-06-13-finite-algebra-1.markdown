@@ -29,9 +29,9 @@ Below is my definition of a group in Haskell:
 
 ```haskell
 data Group a = Group { set :: Set a       -- ^ Elements of the group.
-                       mul :: a -> a -> a -- ^ Group multiplication.
-                       inv :: a -> a      -- ^ Inversion.
-                       e   :: a           -- ^ Identity.
+                     , mul :: a -> a -> a -- ^ Group multiplication.
+                     , inv :: a -> a      -- ^ Inversion.
+                     , e   :: a           -- ^ Identity.
                      }
 ```
 
