@@ -1,0 +1,3 @@
+[submodule "model-checking"]
+	path = model-checking
+	url = git@github.com:/benjaminselfridge/model-checking.git
