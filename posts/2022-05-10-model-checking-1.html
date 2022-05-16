@@ -135,7 +135,7 @@
 <p>The type <code>s</code> represents all possible states our system can be in; if the system is a traffic light, <code>s</code> might be the set of colors <code>{red, green, yellow}</code>; if it’s a sequential circuit, it might be the current value of a set of bits.</p>
 <p>The type <code>ap</code> represents the relevant properties of a given state. Depending on what property we are interested in for our system, we might choose a corresponding set of variables <code>ap</code> that help us to capture the property using propositional logic. Each element of <code>ap</code> is a boolean-valued variable, and depending on which state the system is in, each such variable may be either true or false. The <code>tsLabel</code> function tells us the <em>true-set</em> of each state. The <em>true-set</em> is simply the set of variables which are true in a given state. If a variable is in this list, then it’s true; if it’s absent from the list, it’s false.</p>
 <p>The type <code>action</code> is simply a “name” for each outgoing transition. These names do not carry any semantic content, but it’s often useful to give a name to a transition to indicate “what is happening” as the system changes from state to another.</p>
-<p>In summary, here is the intution behind each of the three fields of a transition system.</p>
+<p>In summary, here is the intuition behind each of the three fields of a transition system.</p>
 <ul>
 <li><code>tsInitialStates ts</code>: “the states that the system can start in”</li>
 <li><code>tsLabel ts s</code>: “the set of variables which are true in state <code>s</code>”</li>
